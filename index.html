@@ -79,10 +79,11 @@
   .big { font-size: 18px; min-width: 52px; }
   kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
   #flash {
-    position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.75);
-    padding: 10px 18px; border-radius: 10px; font-size: 22px; opacity: 0; transition: opacity .3s; pointer-events: none;
+    /* Top-right and faint so it never covers the subtitles */
+    position: absolute; top: 10px; right: 12px; z-index: 5; background: rgba(0,0,0,.3); color: rgba(255,255,255,.75);
+    padding: 4px 10px; border-radius: 8px; font-size: 15px; opacity: 0; transition: opacity .3s; pointer-events: none;
   }
-  #flash.show { opacity: 1; transition: none; }
+  #flash.show { opacity: .7; transition: none; }
 </style>
 </head>
 <body>
@@ -200,6 +201,9 @@ const fmt = (s) => {
 
 function flash(text) {
   const el = $('flash');
+  // Show inside the video frame (also in fullscreen); fall back to the page corner when no media is open
+  const host = ($('stage').offsetParent || document.fullscreenElement) ? $('stage') : document.body;
+  if (el.parentNode !== host) host.appendChild(el);
   el.textContent = text;
   el.classList.add('show');
   clearTimeout(flashTimer);
