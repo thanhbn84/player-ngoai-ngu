@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nghe học ngoại ngữ</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1e2127; --text: #e8e8ea; --muted: #9aa0a6;
+    --accent: #e0a63a; --accent-2: #3a8fe0; --border: #2c3038; --danger: #e05a5a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; padding: 16px;
+  }
+  .app { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+  @media (max-width: 860px) { .app { grid-template-columns: 1fr; } }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 15px; margin: 0; }
+  button, select, label.btn {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover, label.btn:hover { border-color: var(--accent); }
+  button.active { background: var(--accent); color: #111; border-color: var(--accent); }
+  button.small { padding: 2px 7px; font-size: 13px; }
+  input[type=file] { display: none; }
+  .card { background: var(--panel); border-radius: 12px; padding: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .row + .row { margin-top: 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+
+  /* Playlist panel */
+  aside select { flex: 1; min-width: 0; }
+  #items { list-style: none; padding: 0; margin: 10px 0 0; max-height: calc(100vh - 260px); overflow: auto; }
+  #items li {
+    display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  #items li:hover { border-color: var(--border); }
+  #items li.current { background: var(--bg); border-color: var(--accent); }
+  #items li.missing .name { color: var(--danger); text-decoration: line-through; }
+  #items li.dragging { opacity: .4; }
+  #items .num { color: var(--muted); width: 22px; text-align: right; font-size: 13px; }
+  #items .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #items .sub { font-size: 12px; }
+  #items .del { visibility: hidden; }
+  #items li:hover .del { visibility: visible; }
+  #empty { text-align: center; padding: 24px 8px; }
+
+  /* Player */
+  #drop {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 40px 16px; text-align: center; color: var(--muted);
+  }
+  #drop.over, body.over #drop { border-color: var(--accent); color: var(--text); }
+  .stage { background: #000; border-radius: 12px; overflow: hidden; display: none; position: relative; }
+  .stage video { width: 100%; max-height: 68vh; display: block; }
+  .stage.audio video { display: none; }
+  .audio-card { display: none; padding: 48px 16px; text-align: center; font-size: 56px; }
+  .stage.audio .audio-card { display: block; }
+  #subtitle {
+    position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; pointer-events: none;
+    font-size: 22px; text-shadow: 0 0 4px #000, 0 0 4px #000; padding: 0 16px; white-space: pre-line;
+  }
+  .stage.audio #subtitle { position: static; padding: 0 16px 24px; }
+  #notice {
+    display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    background: #3a2a12; border: 1px solid var(--accent);
+  }
+  #notice.error { background: #3a1616; border-color: var(--danger); }
+  .controls { margin-top: 12px; display: none; }
+  #title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 110px; text-align: right; }
+  #bar { position: relative; flex: 1; height: 10px; background: var(--border); border-radius: 5px; cursor: pointer; }
+  #fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: 5px; }
+  #loop-range { position: absolute; top: -3px; bottom: -3px; background: rgba(58,143,224,.35);
+    border: 1px solid var(--accent-2); border-radius: 4px; display: none; }
+  .big { font-size: 18px; min-width: 52px; }
+  kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  #flash {
+    position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.75);
+    padding: 10px 18px; border-radius: 10px; font-size: 22px; opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  #flash.show { opacity: 1; transition: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===== Playlists ===== -->
+  <aside class="card">
+    <h1>🎧 Nghe học ngoại ngữ</h1>
+    <div class="row">
+      <select id="lists" title="Chọn danh sách"></select>
+      <button id="new-list" title="Tạo danh sách mới">＋</button>
+      <button id="rename-list" title="Đổi tên danh sách">✏️</button>
+      <button id="delete-list" title="Xóa danh sách">🗑</button>
+    </div>
+    <div class="row">
+      <button id="add-files">📄 Thêm file</button>
+      <button id="add-folder">📁 Thêm thư mục</button>
+      <label class="btn" for="fallback" id="fallback-btn" hidden>📂 Mở file</label>
+      <input id="fallback" type="file" accept="audio/*,video/*,.mkv,.srt,.vtt" multiple>
+    </div>
+    <ul id="items"></ul>
+    <div id="empty" class="muted">
+      Danh sách trống. Bấm "Thêm file", "Thêm thư mục" hoặc kéo thả file vào trang.<br>
+      File phụ đề .srt/.vtt cùng tên với video sẽ tự gắn vào.
+    </div>
+    <p class="muted" id="storage-note">
+      Danh sách được lưu trong Chrome trên máy này (chỉ lưu đường dẫn, không chép file).
+      Kéo thả để đổi thứ tự.
+    </p>
+  </aside>
+
+  <!-- ===== Player ===== -->
+  <main>
+    <div id="drop">Kéo thả file video/nhạc (và phụ đề .srt/.vtt) vào đây để thêm vào danh sách đang chọn.</div>
+
+    <div class="stage" id="stage">
+      <video id="media" playsinline preload="metadata"></video>
+      <div class="audio-card">🎵</div>
+      <div id="subtitle"></div>
+    </div>
+
+    <div id="notice"></div>
+
+    <div class="controls card" id="controls">
+      <div class="row">
+        <span id="title"></span>
+        <span class="time" id="time">0:00 / 0:00</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div id="bar"><div id="loop-range"></div><div id="fill"></div></div>
+      </div>
+      <div class="row">
+        <button class="big" id="prev" title="Bài trước">⏮</button>
+        <button class="big" id="back" title="Lùi (phím ←)">⏪</button>
+        <button class="big" id="play" title="Phát / tạm dừng (Enter hoặc Space)">▶</button>
+        <button class="big" id="fwd" title="Tới (phím →)">⏩</button>
+        <button class="big" id="next" title="Bài sau">⏭</button>
+        <label>Bước nhảy
+          <select id="step">
+            <option value="1">1s</option><option value="2" selected>2s</option>
+            <option value="3">3s</option><option value="5">5s</option><option value="10">10s</option>
+          </select>
+        </label>
+        <label>Tốc độ
+          <select id="rate">
+            <option>0.5</option><option>0.6</option><option>0.7</option><option>0.75</option><option>0.8</option>
+            <option>0.9</option><option selected>1</option><option>1.1</option><option>1.25</option><option>1.5</option>
+          </select>
+        </label>
+        <button id="repeat" title="Lặp lại: tắt / 1 bài / cả danh sách (phím R)">➡️ Không lặp</button>
+        <button id="ab" title="Lặp đoạn A-B (phím L)">🔁 A-B</button>
+        <button id="sub-btn" title="Gắn phụ đề .srt/.vtt cho bài đang phát">💬 Phụ đề</button>
+        <input id="sub-file" type="file" accept=".srt,.vtt">
+        <label>🔊 <input id="vol" type="range" min="0" max="1" step="0.05" value="1"></label>
+        <button id="full" title="Toàn màn hình (phím F)">⛶</button>
+      </div>
+      <p class="muted" style="margin:10px 0 0">
+        <kbd>Enter</kbd> / <kbd>Space</kbd> phát/tạm dừng ·
+        <kbd>←</kbd> <kbd>→</kbd> lùi/tới theo bước nhảy ·
+        <kbd>↑</kbd> <kbd>↓</kbd> tốc độ ·
+        <kbd>R</kbd> lặp lại (tắt → 1 bài → cả danh sách) ·
+        <kbd>L</kbd> lặp A-B (bấm 3 lần: đặt A, đặt B, tắt) ·
+        <kbd>N</kbd> / <kbd>P</kbd> bài sau/trước ·
+        <kbd>F</kbd> toàn màn hình. Phím dùng được ở bất kỳ đâu trong trang.
+        Vị trí đang nghe của mỗi file được nhớ lại.
+      </p>
+    </div>
+  </main>
+</div>
+<div id="flash"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const media = $('media'), stage = $('stage');
+const MEDIA_RE = /\.(mp4|m4v|webm|ogv|mov|mkv|mp3|m4a|aac|wav|ogg|oga|opus|flac|weba)$/i;
+const AUDIO_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba)$/i;
+const SUB_RE = /\.(srt|vtt)$/i;
+const baseName = (n) => n.replace(/\.[^.]+$/, '').toLowerCase();
+
+// Chrome/Edge can remember file handles between visits; other browsers only play files picked this session
+const CAN_SAVE = 'showOpenFilePicker' in window && 'indexedDB' in window;
+
+let lists = [];          // [{id, name, items: [{name, size, handle, sub, dir}]}]
+let list = null;         // the list shown in the panel
+let playingList = null;  // the list the current track belongs to
+let current = -1, cues = [], loopA = null, loopB = null, flashTimer;
+const sessionFiles = new Map(); // item -> File picked without a handle (fallback browsers)
+
+// ---------- Small helpers ----------
+const fmt = (s) => {
+  if (!isFinite(s)) return '0:00';
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+};
+
+function flash(text) {
+  const el = $('flash');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => el.classList.remove('show'), 600);
+}
+
+function notice(html, isError = false) {
+  const el = $('notice');
+  el.innerHTML = html;
+  el.className = isError ? 'error' : '';
+  el.style.display = html ? 'block' : 'none';
+}
+
+// ---------- Storage (IndexedDB keeps the file handles) ----------
+const DB = {
+  db: null,
+  open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('player-ngoaingu', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('lists', { keyPath: 'id' });
+      req.onsuccess = () => { this.db = req.result; resolve(); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  tx(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const t = this.db.transaction('lists', mode);
+      const result = fn(t.objectStore('lists'));
+      t.oncomplete = () => resolve(result.result ?? result);
+      t.onerror = () => reject(t.error);
+    });
+  },
+  all() { return this.tx('readonly', (s) => s.getAll()); },
+  put(l) { return this.tx('readwrite', (s) => s.put(l)); },
+  del(id) { return this.tx('readwrite', (s) => s.delete(id)); },
+};
+
+async function saveList(l) {
+  if (!CAN_SAVE) return;
+  // Only plain data and handles are stored, never the file contents
+  const items = l.items.map(({ name, size, handle, sub, dir }) => ({ name, size, handle, sub, dir }));
+  try { await DB.put({ id: l.id, name: l.name, items }); } catch (e) { console.warn('Save failed', e); }
+}
+
+function setLastList(id) { try { localStorage.setItem('lastList', id); } catch (e) {} }
+
+async function init() {
+  if (CAN_SAVE) {
+    await DB.open();
+    lists = await DB.all();
+  } else {
+    $('add-files').hidden = $('add-folder').hidden = true;
+    $('fallback-btn').hidden = false;
+    $('storage-note').textContent = 'Trình duyệt này không lưu được danh sách. Hãy dùng Chrome hoặc Edge để lưu lại.';
+  }
+  if (!lists.length) lists.push({ id: String(Date.now()), name: 'Danh sách 1', items: [] });
+  let last = null;
+  try { last = localStorage.getItem('lastList'); } catch (e) {}
+  list = lists.find((l) => l.id === last) || lists[0];
+  renderLists();
+  renderItems();
+}
+
+// ---------- Playlist management ----------
+function renderLists() {
+  const sel = $('lists');
+  sel.innerHTML = '';
+  for (const l of lists) {
+    const o = document.createElement('option');
+    o.value = l.id;
+    o.textContent = `${l.name} (${l.items.length})`;
+    sel.appendChild(o);
+  }
+  sel.value = list.id;
+}
+
+function renderItems() {
+  const ul = $('items');
+  ul.innerHTML = '';
+  $('empty').style.display = list.items.length ? 'none' : 'block';
+  list.items.forEach((it, i) => {
+    const li = document.createElement('li');
+    li.draggable = true;
+    if (playingList === list && i === current) li.classList.add('current');
+    if (it.missing) li.classList.add('missing');
+    li.innerHTML = `<span class="num">${i + 1}</span><span class="name"></span>` +
+      `${it.sub ? '<span class="sub" title="Có phụ đề">💬</span>' : ''}` +
+      `<button class="small del" title="Bỏ khỏi danh sách">✕</button>`;
+    li.querySelector('.name').textContent = it.name;
+    li.title = it.name;
+    li.onclick = (e) => { if (!e.target.classList.contains('del')) play(list, i, true); };
+    li.querySelector('.del').onclick = () => removeItem(i);
+    // Drag to reorder
+    li.ondragstart = (e) => { e.dataTransfer.setData('text/x-index', String(i)); li.classList.add('dragging'); };
+    li.ondragend = () => li.classList.remove('dragging');
+    li.ondragover = (e) => { if (e.dataTransfer.types.includes('text/x-index')) e.preventDefault(); };
+    li.ondrop = (e) => {
+      const from = Number(e.dataTransfer.getData('text/x-index'));
+      if (Number.isNaN(from) || !e.dataTransfer.types.includes('text/x-index')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      moveItem(from, i);
+    };
+    ul.appendChild(li);
+  });
+}
+
+function moveItem(from, to) {
+  if (from === to) return;
+  const playingItem = playingList === list ? list.items[current] : null;
+  const [it] = list.items.splice(from, 1);
+  list.items.splice(to, 0, it);
+  if (playingItem) current = list.items.indexOf(playingItem);
+  renderItems();
+  saveList(list);
+}
+
+function removeItem(i) {
+  const playingItem = playingList === list ? list.items[current] : null;
+  list.items.splice(i, 1);
+  if (playingItem) current = list.items.indexOf(playingItem); // -1 if the playing one was removed
+  renderItems();
+  renderLists();
+  saveList(list);
+}
+
+$('lists').onchange = (e) => {
+  list = lists.find((l) => l.id === e.target.value);
+  setLastList(list.id);
+  renderItems();
+};
+
+$('new-list').onclick = async () => {
+  const name = prompt('Tên danh sách mới:', `Danh sách ${lists.length + 1}`);
+  if (!name || !name.trim()) return;
+  list = { id: String(Date.now()), name: name.trim(), items: [] };
+  lists.push(list);
+  setLastList(list.id);
+  renderLists();
+  renderItems();
+  await saveList(list);
+};
+
+$('rename-list').onclick = async () => {
+  const name = prompt('Đổi tên danh sách:', list.name);
+  if (!name || !name.trim()) return;
+  list.name = name.trim();
+  renderLists();
+  await saveList(list);
+};
+
+$('delete-list').onclick = async () => {
+  if (!confirm(`Xóa danh sách "${list.name}"? (Các file trên máy không bị xóa)`)) return;
+  if (CAN_SAVE) await DB.del(list.id);
+  lists = lists.filter((l) => l !== list);
+  if (playingList && !lists.includes(playingList)) playingList = null;
+  if (!lists.length) lists.push({ id: String(Date.now()), name: 'Danh sách 1', items: [] });
+  list = lists[0];
+  setLastList(list.id);
+  renderLists();
+  renderItems();
+};
+
+// ---------- Adding files ----------
+// entries: [{name, size, handle?, file?, dir?}] - media and subtitle files mixed
+async function addEntries(entries) {
+  const subs = entries.filter((e) => SUB_RE.test(e.name));
+  const medias = entries.filter((e) => MEDIA_RE.test(e.name)).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true }));
+  let added = 0;
+  for (const m of medias) {
+    if (list.items.some((it) => it.name === m.name && it.size === m.size)) continue; // already in the list
+    const sub = subs.find((s) => baseName(s.name) === baseName(m.name));
+    const item = { name: m.name, size: m.size, handle: m.handle || null, sub: sub?.handle || null, dir: m.dir || null };
+    if (m.file) sessionFiles.set(item, m.file);
+    if (sub?.file) sessionFiles.set(item.sub = { name: sub.name }, sub.file);
+    list.items.push(item);
+    added++;
+  }
+  // Subtitles dropped alone go to the track that is playing
+  if (!medias.length && subs.length && current >= 0) {
+    const s = subs[0];
+    loadSubtitle(s.file || await s.handle.getFile());
+    const it = playingList.items[current];
+    if (s.handle) { it.sub = s.handle; saveList(playingList); }
+    renderItems();
+    return;
+  }
+  renderItems();
+  renderLists();
+  await saveList(list);
+  flash(added ? `Đã thêm ${added} file` : 'Không có file mới');
+  if (current < 0 && list.items.length && added) play(list, list.items.length - added, true);
+}
+
+async function fromHandles(handles, root = null) {
+  const out = [];
+  for (const h of handles) {
+    if (h.kind === 'directory') { out.push(...await fromDirectory(h, root || h)); continue; }
+    if (!MEDIA_RE.test(h.name) && !SUB_RE.test(h.name)) continue;
+    const f = await h.getFile();
+    out.push({ name: h.name, size: f.size, handle: h, dir: root });
+  }
+  return out;
+}
+
+// Files in sub-folders keep the top folder as `dir`, so one permission prompt covers them all
+async function fromDirectory(dirHandle, root = dirHandle) {
+  const handles = [];
+  for await (const h of dirHandle.values()) handles.push(h);
+  return fromHandles(handles, root);
+}
+
+$('add-files').onclick = async () => {
+  try {
+    const handles = await showOpenFilePicker({
+      multiple: true,
+      types: [{ description: 'Video / nhạc / phụ đề', accept: {
+        'video/*': ['.mp4', '.m4v', '.webm', '.ogv', '.mov', '.mkv'],
+        'audio/*': ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.oga', '.opus', '.flac', '.weba'],
+        'text/plain': ['.srt', '.vtt'],
+      } }],
+    });
+    await addEntries(await fromHandles(handles));
+  } catch (e) { if (e.name !== 'AbortError') notice(`Không mở được file: ${e.message}`, true); }
+};
+
+$('add-folder').onclick = async () => {
+  try {
+    const dir = await showDirectoryPicker({ mode: 'read' });
+    flash('Đang đọc thư mục...');
+    await addEntries(await fromDirectory(dir));
+  } catch (e) { if (e.name !== 'AbortError') notice(`Không mở được thư mục: ${e.message}`, true); }
+};
+
+$('fallback').onchange = async (e) => {
+  await addEntries([...e.target.files].map((f) => ({ name: f.name, size: f.size, file: f })));
+  e.target.value = '';
+};
+
+// Drag & drop files/folders onto the page
+document.addEventListener('dragover', (e) => {
+  if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); document.body.classList.add('over'); }
+});
+document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('over'); });
+document.addEventListener('drop', async (e) => {
+  document.body.classList.remove('over');
+  if (!e.dataTransfer.types.includes('Files')) return;
+  e.preventDefault();
+  const items = [...e.dataTransfer.items].filter((i) => i.kind === 'file');
+  if (CAN_SAVE && items[0]?.getAsFileSystemHandle) {
+    const handles = (await Promise.all(items.map((i) => i.getAsFileSystemHandle()))).filter(Boolean);
+    await addEntries(await fromHandles(handles));
+  } else {
+    await addEntries([...e.dataTransfer.files].map((f) => ({ name: f.name, size: f.size, file: f })));
+  }
+});
+
+// ---------- Opening a saved file ----------
+// Chrome asks again for read permission after the page is reopened; that needs a click (userClick).
+async function ensurePermission(handle, userClick) {
+  if ((await handle.queryPermission({ mode: 'read' })) === 'granted') return true;
+  if (!userClick) return false;
+  try { return (await handle.requestPermission({ mode: 'read' })) === 'granted'; } catch (e) { return false; }
+}
+
+async function getFile(item, userClick) {
+  if (sessionFiles.has(item)) return sessionFiles.get(item);
+  if (!item.handle) return null;
+  // A folder grant covers every file in it, so ask once for the folder when we have it
+  if (item.dir && !(await ensurePermission(item.dir, userClick)) && !(await ensurePermission(item.handle, false))) return 'denied';
+  if (!item.dir && !(await ensurePermission(item.handle, userClick))) return 'denied';
+  return item.handle.getFile();
+}
+
+async function play(l, i, userClick = false) {
+  if (i < 0 || i >= l.items.length) return;
+  const item = l.items[i];
+  let file;
+  try {
+    file = await getFile(item, userClick);
+  } catch (e) {
+    item.missing = true;
+    renderItems();
+    notice(`Không tìm thấy "${item.name}". File có thể đã bị đổi tên, di chuyển hoặc xóa. Bấm ✕ để bỏ khỏi danh sách rồi thêm lại.`, true);
+    return;
+  }
+  if (file === 'denied' || !file) {
+    // Not allowed without a click (e.g. auto-next after reopening the page)
+    notice(`Chrome cần bạn cho phép đọc file. <button id="grant">▶ Bấm để phát "${item.name.replace(/[<&"]/g, '')}"</button>`);
+    $('grant').onclick = () => { notice(''); play(l, i, true); };
+    return;
+  }
+  item.missing = false;
+  notice('');
+  savePosition();
+  playingList = l;
+  current = i;
+  if (media.src) URL.revokeObjectURL(media.src);
+  media.src = URL.createObjectURL(file);
+  stage.classList.toggle('audio', AUDIO_RE.test(item.name));
+  stage.style.display = 'block';
+  $('controls').style.display = 'block';
+  $('drop').style.display = 'none';
+  $('title').textContent = item.name;
+  document.title = item.name;
+  cues = [];
+  $('subtitle').textContent = '';
+  clearLoop();
+  renderItems();
+  if (item.sub) {
+    try {
+      const subFile = sessionFiles.get(item.sub) || (await ensurePermission(item.sub, userClick) && await item.sub.getFile());
+      if (subFile) loadSubtitle(subFile, false);
+    } catch (e) { /* subtitle moved: play without it */ }
+  }
+  media.addEventListener('loadedmetadata', () => {
+    const saved = Number(localStorage.getItem(posKey()) || 0);
+    if (saved > 5 && saved < media.duration - 5) {
+      media.currentTime = saved;
+      flash(`Nghe tiếp từ ${fmt(saved)}`);
+    }
+    media.play().catch(() => {});
+  }, { once: true });
+}
+
+media.addEventListener('error', () => {
+  if (current < 0) return;
+  notice(`Chrome không phát được "${playingList.items[current].name}". ` +
+    'Hãy đổi sang mp4 (video) hoặc mp3 (nhạc), ví dụ bằng HandBrake hoặc lệnh <code>ffmpeg -i file.avi file.mp4</code>.', true);
+});
+
+// Remember where each file was left (keyed by name + size)
+const posKey = () => current >= 0 && playingList?.items[current]
+  ? `pos:${playingList.items[current].name}:${playingList.items[current].size}` : '';
+function savePosition() {
+  if (!posKey() || !isFinite(media.duration)) return;
+  try { localStorage.setItem(posKey(), String(media.currentTime)); } catch (e) {}
+}
+setInterval(savePosition, 3000);
+window.addEventListener('beforeunload', savePosition);
+
+// ---------- Subtitles (.srt / .vtt) ----------
+async function loadSubtitle(file, announce = true) {
+  const text = (await file.text()).replace(/\r/g, '');
+  const toSec = (t) => {
+    const p = t.trim().replace(',', '.').split(':').map(Number);
+    return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
+  };
+  cues = [];
+  for (const block of text.split(/\n\n+/)) {
+    const lines = block.split('\n');
+    const i = lines.findIndex((l) => l.includes('-->'));
+    if (i < 0) continue;
+    const [a, b] = lines[i].split('-->');
+    cues.push({ start: toSec(a), end: toSec(b.trim().split(' ')[0]),
+      text: lines.slice(i + 1).join('\n').replace(/<[^>]+>/g, '') });
+  }
+  if (announce) flash(`Đã nạp ${cues.length} dòng phụ đề`);
+}
+
+$('sub-btn').onclick = async () => {
+  if (current < 0) return;
+  const item = playingList.items[current];
+  if (CAN_SAVE) {
+    try {
+      const [h] = await showOpenFilePicker({ types: [{ description: 'Phụ đề', accept: { 'text/plain': ['.srt', '.vtt'] } }] });
+      item.sub = h;
+      loadSubtitle(await h.getFile());
+      renderItems();
+      saveList(playingList);
+    } catch (e) { /* cancelled */ }
+  } else {
+    $('sub-file').click();
+  }
+};
+$('sub-file').onchange = (e) => { if (e.target.files[0]) loadSubtitle(e.target.files[0]); e.target.value = ''; };
+
+// ---------- Playback ----------
+function togglePlay() {
+  if (current < 0) {
+    if (list.items.length) play(list, 0, true);
+    return;
+  }
+  if (media.paused) { media.play(); flash('▶'); } else { media.pause(); flash('⏸'); }
+}
+
+function seek(delta) {
+  if (current < 0) return;
+  media.currentTime = Math.min(Math.max(0, media.currentTime + delta), media.duration || 0);
+  flash(`${delta > 0 ? '⏩ +' : '⏪ '}${delta}s`);
+}
+
+const step = () => Number($('step').value);
+const playNext = (dir, userClick) => {
+  if (current < 0 || !playingList) return;
+  const i = current + dir;
+  if (i >= 0 && i < playingList.items.length) play(playingList, i, userClick);
+};
+
+function setRate(r) {
+  const opts = [...$('rate').options].map((o) => Number(o.value));
+  const value = opts.reduce((best, o) => Math.abs(o - r) < Math.abs(best - r) ? o : best, opts[0]);
+  $('rate').value = String(value);
+  media.playbackRate = value;
+  flash(`Tốc độ ${value}x`);
+}
+
+function clearLoop() {
+  loopA = loopB = null;
+  $('ab').classList.remove('active');
+  $('ab').textContent = '🔁 A-B';
+  $('loop-range').style.display = 'none';
+}
+
+// 1st press: set A, 2nd: set B (loop on), 3rd: off
+function toggleLoop() {
+  if (current < 0) return;
+  if (loopA === null) {
+    loopA = media.currentTime;
+    $('ab').textContent = `🔁 A=${fmt(loopA)}`;
+    flash(`A = ${fmt(loopA)}`);
+  } else if (loopB === null) {
+    if (media.currentTime <= loopA + 0.3) { flash('B phải sau A'); return; }
+    loopB = media.currentTime;
+    $('ab').classList.add('active');
+    $('ab').textContent = `🔁 ${fmt(loopA)}–${fmt(loopB)}`;
+    const d = media.duration || 1;
+    Object.assign($('loop-range').style, { display: 'block', left: `${loopA / d * 100}%`, width: `${(loopB - loopA) / d * 100}%` });
+    media.currentTime = loopA;
+    flash('Đang lặp A-B');
+  } else {
+    clearLoop();
+    flash('Tắt lặp');
+  }
+}
+
+// Repeat mode: off -> one track -> whole list (remembered between visits)
+const REPEAT = [
+  { mode: 'off', label: '➡️ Không lặp' },
+  { mode: 'one', label: '🔂 Lặp 1 bài' },
+  { mode: 'all', label: '🔁 Lặp danh sách' },
+];
+let repeat = 'off';
+function setRepeat(mode, announce) {
+  repeat = REPEAT.some((r) => r.mode === mode) ? mode : 'off';
+  const r = REPEAT.find((x) => x.mode === repeat);
+  $('repeat').textContent = r.label;
+  $('repeat').classList.toggle('active', repeat !== 'off');
+  try { localStorage.setItem('repeat', repeat); } catch (e) {}
+  if (announce) flash(r.label);
+}
+function cycleRepeat() {
+  const i = REPEAT.findIndex((r) => r.mode === repeat);
+  setRepeat(REPEAT[(i + 1) % REPEAT.length].mode, true);
+}
+try { setRepeat(localStorage.getItem('repeat') || 'off', false); } catch (e) { setRepeat('off', false); }
+
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else stage.requestFullscreen?.();
+}
+
+media.addEventListener('timeupdate', () => {
+  const t = media.currentTime, d = media.duration;
+  if (loopB !== null && t >= loopB) media.currentTime = loopA;
+  $('fill').style.width = d ? `${t / d * 100}%` : '0';
+  $('time').textContent = `${fmt(t)} / ${fmt(d)}`;
+  if (cues.length) {
+    const cue = cues.find((c) => t >= c.start && t <= c.end);
+    $('subtitle').textContent = cue ? cue.text : '';
+  }
+});
+media.addEventListener('play', () => { $('play').textContent = '⏸'; });
+media.addEventListener('pause', () => { $('play').textContent = '▶'; });
+media.addEventListener('ended', () => {
+  try { localStorage.removeItem(posKey()); } catch (e) {} // finished: start from 0 next time
+  if (repeat === 'one') {
+    media.currentTime = 0;
+    media.play();
+  } else if (repeat === 'all' && current === playingList.items.length - 1) {
+    play(playingList, 0, false); // back to the first track
+  } else {
+    playNext(1, false);
+  }
+});
+
+$('bar').addEventListener('click', (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  if (media.duration) media.currentTime = (e.clientX - r.left) / r.width * media.duration;
+});
+$('play').onclick = togglePlay;
+$('back').onclick = () => seek(-step());
+$('fwd').onclick = () => seek(step());
+$('prev').onclick = () => playNext(-1, true);
+$('next').onclick = () => playNext(1, true);
+$('rate').onchange = (e) => setRate(Number(e.target.value));
+$('vol').oninput = (e) => { media.volume = Number(e.target.value); };
+$('ab').onclick = toggleLoop;
+$('repeat').onclick = cycleRepeat;
+$('full').onclick = toggleFull;
+media.onclick = togglePlay;
+
+// ---------- Keyboard: works anywhere on the page ----------
+// Capture phase + preventDefault so a focused button/select/slider never eats these keys.
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const actions = {
+    Enter: togglePlay,
+    NumpadEnter: togglePlay,
+    Space: togglePlay,
+    ArrowLeft: () => seek(-step()),
+    ArrowRight: () => seek(step()),
+    ArrowUp: () => setRate(media.playbackRate + 0.1),
+    ArrowDown: () => setRate(media.playbackRate - 0.1),
+    KeyL: toggleLoop,
+    KeyR: cycleRepeat,
+    KeyF: toggleFull,
+    KeyN: () => playNext(1, true),
+    KeyP: () => playNext(-1, true),
+  };
+  const action = actions[e.code];
+  if (!action) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (!e.repeat || e.code.startsWith('Arrow')) action();
+}, true);
+
+init().catch((e) => notice(`Không khởi động được: ${e.message}`, true));
+</script>
+</body>
+</html>
